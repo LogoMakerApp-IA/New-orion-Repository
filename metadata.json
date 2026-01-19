@@ -1,0 +1,7 @@
+{
+  "name": "Orion 1.5 ou 2.0 funcional e integrado",
+  "description": "A silent, precise, and observant system presence AI. Non-social, minimalist interface focused on state and intent.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
