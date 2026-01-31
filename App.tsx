@@ -1,251 +1,169 @@
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import OrionEyes from './components/OrionEyes';
 import OrionInput from './components/OrionInput';
 import TerminalOutput from './components/TerminalOutput';
-import { Message, OrionState, PendingAction, SysNotification } from './types';
+import LoginOverlay from './components/LoginOverlay';
+import VoiceInterface from './components/VoiceInterface';
+import { Message, OrionState, UserSession } from './types';
 import { sendMessageToOrion } from './services/geminiService';
-import { saveMemory, saveHistory, getHistory, clearHistory } from './services/memoryService';
+import { saveHistory, getHistory } from './services/memoryService';
 
 const App: React.FC = () => {
-  const [orionState, setOrionState] = useState<OrionState>(OrionState.IDLE);
+  const [orionState, setOrionState] = useState<OrionState>(OrionState.UNAUTHENTICATED);
+  const [user, setUser] = useState<UserSession | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [filterSystemLogs, setFilterSystemLogs] = useState(false);
   const [inputValue, setInputValue] = useState('');
-  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
-  const [notifications] = useState<SysNotification[]>([]);
+  const [isVoiceMode, setIsVoiceMode] = useState(false);
+  
+  const stateResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const sleepSequenceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const startupSequenceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const inactivityTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [isUserInactive, setIsUserInactive] = useState(false);
-
-  const stateRef = useRef(orionState);
-  useEffect(() => {
-    stateRef.current = orionState;
-  }, [orionState]);
-
-  useEffect(() => {
-    const savedMessages = getHistory();
-    if (savedMessages && savedMessages.length > 0) {
-      setMessages(savedMessages);
-    }
+  // Função central para mudança de estado temporária (Busca ou Alerta)
+  const setTemporaryState = useCallback((state: OrionState, duration: number = 3000) => {
+    if (stateResetTimerRef.current) clearTimeout(stateResetTimerRef.current);
+    setOrionState(state);
+    stateResetTimerRef.current = setTimeout(() => {
+      const isFocused = document.activeElement?.tagName === 'TEXTAREA';
+      setOrionState(isFocused ? OrionState.FOCUSED : OrionState.IDLE);
+    }, duration);
   }, []);
 
+  // Monitor de Erros Globais (Anomalias de Interface/Sistema)
   useEffect(() => {
-    if (messages.length > 0) {
-      saveHistory(messages);
-    }
-  }, [messages]);
-
-  const isDeepDiveMode = messages.length > 4;
-
-  const resetInactivity = useCallback(() => {
-    setIsUserInactive(false);
-    if (stateRef.current === OrionState.OBSERVING) {
-       setOrionState(OrionState.IDLE);
-    }
-    if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
-    if (isDeepDiveMode) {
-      inactivityTimer.current = setTimeout(() => {
-        setIsUserInactive(true);
-        if (stateRef.current !== OrionState.PROCESSING && 
-            stateRef.current !== OrionState.FOCUSED && 
-            stateRef.current !== OrionState.FOCUSED_EMPTY) {
-            setOrionState(OrionState.OBSERVING);
-        }
-      }, 5000);
-    }
-  }, [isDeepDiveMode]);
-
-  useEffect(() => {
-    window.addEventListener('mousemove', resetInactivity);
-    window.addEventListener('keydown', resetInactivity);
-    window.addEventListener('scroll', resetInactivity);
-    resetInactivity();
+    const handleError = () => setTemporaryState(OrionState.SYSTEM_ALERT, 3000);
+    window.addEventListener('error', handleError);
+    window.addEventListener('unhandledrejection', handleError);
     return () => {
-      window.removeEventListener('mousemove', resetInactivity);
-      window.removeEventListener('keydown', resetInactivity);
-      window.removeEventListener('scroll', resetInactivity);
-      if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
+      window.removeEventListener('error', handleError);
+      window.removeEventListener('unhandledrejection', handleError);
     };
-  }, [resetInactivity]);
+  }, [setTemporaryState]);
 
-  const startSleepSequence = useCallback(() => {
-    if (isDeepDiveMode) return;
-    if (stateRef.current === OrionState.AWAITING_PERMISSION || 
-        stateRef.current === OrionState.PROCESSING ||
-        stateRef.current === OrionState.SYSTEM_ALERT ||
-        stateRef.current === OrionState.SYSTEM_SUCCESS) return;
-    setOrionState(OrionState.PRE_SLEEP);
-    if (sleepSequenceTimer.current) clearTimeout(sleepSequenceTimer.current);
-    sleepSequenceTimer.current = setTimeout(() => {
-      if (stateRef.current === OrionState.AWAITING_PERMISSION || 
-          stateRef.current === OrionState.PROCESSING ||
-          stateRef.current === OrionState.SYSTEM_ALERT ||
-          stateRef.current === OrionState.SYSTEM_SUCCESS) return;
-      setOrionState(OrionState.SQUINTING);
-      sleepSequenceTimer.current = setTimeout(() => {
-        if (stateRef.current === OrionState.AWAITING_PERMISSION || 
-            stateRef.current === OrionState.PROCESSING ||
-            stateRef.current === OrionState.SYSTEM_ALERT ||
-            stateRef.current === OrionState.SYSTEM_SUCCESS) return;
-        setOrionState(OrionState.SLEEPING);
-      }, 3000); 
-    }, 4000); 
-  }, [isDeepDiveMode]);
-
-  const cancelSleepSequence = useCallback(() => {
-    if (sleepSequenceTimer.current) {
-      clearTimeout(sleepSequenceTimer.current);
-      sleepSequenceTimer.current = null;
+  // Persistência de Login
+  useEffect(() => {
+    const savedUser = localStorage.getItem('ORION_USER_SESSION');
+    if (savedUser) {
+      const parsedUser = JSON.parse(savedUser);
+      setUser(parsedUser);
+      setMessages(getHistory(parsedUser.uid));
+      setOrionState(OrionState.BOOTING);
     }
   }, []);
 
-  const handleInputFocus = () => {
-    resetInactivity();
-    if (startupSequenceTimer.current) clearTimeout(startupSequenceTimer.current);
-    cancelSleepSequence();
-    if (orionState === OrionState.AWAITING_PERMISSION || orionState === OrionState.SYSTEM_ALERT || orionState === OrionState.SYSTEM_SUCCESS) return;
-    setOrionState(inputValue.length === 0 ? OrionState.FOCUSED_EMPTY : OrionState.FOCUSED);
-  };
+  const handleLogout = useCallback(() => {
+    setOrionState(OrionState.AUTHENTICATING);
+    setTimeout(() => {
+      localStorage.removeItem('ORION_USER_SESSION');
+      setUser(null);
+      setMessages([]);
+      setOrionState(OrionState.UNAUTHENTICATED);
+    }, 1500);
+  }, []);
 
-  const handleInputBlur = () => {
-    if (orionState !== OrionState.PROCESSING && orionState !== OrionState.AWAITING_PERMISSION && orionState !== OrionState.SYSTEM_ALERT && orionState !== OrionState.SYSTEM_SUCCESS) {
-        startSleepSequence();
-    }
-  };
-
-  const handleInputChange = (val: string) => {
-    resetInactivity();
-    setInputValue(val);
-    if (orionState !== OrionState.PROCESSING && orionState !== OrionState.AWAITING_PERMISSION && orionState !== OrionState.SYSTEM_ALERT && orionState !== OrionState.SYSTEM_SUCCESS) {
-        setOrionState(val.length === 0 ? OrionState.FOCUSED_EMPTY : OrionState.FOCUSED);
-    }
-  };
-
-  const processOrionResponse = (responseText: string) => {
-    let cleanText = responseText;
-
-    // Process Memory FIRST
-    const memoryRegex = /\[\[MEMORY_WRITE:\s*(.*?)\]\]/g;
-    let match;
-    while ((match = memoryRegex.exec(cleanText)) !== null) {
-      const contentToSave = match[1];
-      saveMemory(contentToSave);
-      setOrionState(OrionState.SYSTEM_SUCCESS);
-    }
-    cleanText = cleanText.replace(memoryRegex, '').trim();
-
-    // Handle Reset Signal
-    if (cleanText.includes('[[SESSION_RESET]]')) {
-      cleanText = cleanText.replace('[[SESSION_RESET]]', '').trim();
-      setOrionState(OrionState.SYSTEM_SUCCESS);
-      // Wait for user to read the message before wiping
-      setTimeout(() => {
-        setMessages([]);
-        clearHistory();
-        setOrionState(OrionState.IDLE);
-      }, 3000);
-    }
-
-    const permissionRegex = /\[\[REQUEST_PERMISSION:\s*(.*?)\]\]/;
-    const permMatch = cleanText.match(permissionRegex);
-    if (permMatch) {
-      const actionDescription = permMatch[1];
-      cleanText = cleanText.replace(permissionRegex, '').trim();
-      setPendingAction({ description: actionDescription, originalResponse: cleanText });
-    }
-
-    return cleanText;
+  const handleLogin = (method: 'full' | 'guest', data?: any) => {
+    setOrionState(OrionState.AUTHENTICATING);
+    setTimeout(() => {
+      const isGuest = method === 'guest';
+      const userData: UserSession = !isGuest
+        ? { uid: 'u-' + btoa(data.email).substr(0, 10), name: data.email.split('@')[0], email: data.email, isGuest: false }
+        : { uid: 'guest-' + Date.now(), name: 'Visitante', email: '', isGuest: true };
+      
+      localStorage.setItem('ORION_USER_SESSION', JSON.stringify(userData));
+      setUser(userData);
+      setMessages(getHistory(userData.uid));
+      setOrionState(OrionState.BOOTING);
+    }, 1500);
   };
 
   const handleSendMessage = async () => {
-    if (!inputValue.trim() || orionState === OrionState.PROCESSING || orionState === OrionState.AWAITING_PERMISSION) return;
-    resetInactivity();
-    const currentText = inputValue;
-    setInputValue('');
-    cancelSleepSequence();
-    setOrionState(OrionState.PROCESSING);
+    if (!inputValue.trim() || orionState === OrionState.PROCESSING || !user) return;
     
-    const userMsg: Message = { id: Date.now().toString(), role: 'user', content: currentText, timestamp: Date.now() };
-    const newHistory = [...messages, userMsg];
-    setMessages(newHistory);
+    const currentText = inputValue.trim();
+    const systemKeywords = ['bateria', 'cpu', 'hardware', 'sistema', 'memória', 'status', 'info'];
+    const isSystemQuery = systemKeywords.some(kw => currentText.toLowerCase().includes(kw));
 
+    setInputValue('');
+    
+    // Se for busca de sistema, animação especial primeiro
+    if (isSystemQuery) {
+      setOrionState(OrionState.SYSTEM_SEARCHING);
+      await new Promise(r => setTimeout(r, 1800));
+    }
+
+    setOrionState(OrionState.PROCESSING);
+    const userMsg: Message = { id: Date.now().toString(), role: 'user', content: currentText, timestamp: Date.now() };
+    const updatedHistory = [...messages, userMsg];
+    setMessages(updatedHistory);
+    
     try {
-      const rawResponse = await sendMessageToOrion(newHistory, currentText, notifications);
-      const cleanResponse = processOrionResponse(rawResponse);
+      const response = await sendMessageToOrion(user.uid, updatedHistory, currentText, [], undefined, user.isGuest);
       
-      const systemMsg: Message = { id: (Date.now() + 1).toString(), role: 'model', content: cleanResponse, timestamp: Date.now() };
-      
-      // If session was reset, the message will still show briefly because of the delay in processOrionResponse
-      setMessages(prev => prev.length > 0 ? [...prev, systemMsg] : [systemMsg]);
-      
-      if (rawResponse.includes('[[REQUEST_PERMISSION:')) {
-         setOrionState(OrionState.AWAITING_PERMISSION);
-      } else if (stateRef.current !== OrionState.SYSTEM_SUCCESS) {
-         setOrionState(OrionState.ACTIVE);
-         setTimeout(() => { if (stateRef.current === OrionState.ACTIVE) setOrionState(OrionState.IDLE); }, 1500);
-      } else {
-        // Success state usually goes to idle after a bit
-        setTimeout(() => { if (stateRef.current === OrionState.SYSTEM_SUCCESS) setOrionState(OrionState.IDLE); }, 2000);
+      // Interceptador de Protocolo de Logout
+      if (response.includes('[[LOGOUT]]')) {
+        const cleanResponse = response.replace('[[LOGOUT]]', '').trim();
+        setMessages(prev => [...prev, { id: 'logout-msg', role: 'model', content: cleanResponse, timestamp: Date.now() }]);
+        setTimeout(handleLogout, 2500);
+        return;
       }
-    } catch (error) {
-      console.error(error);
+
+      setMessages(prev => [...prev, { id: Date.now().toString(), role: 'model', content: response, timestamp: Date.now() }]);
       setOrionState(OrionState.IDLE);
-      startSleepSequence();
+      saveHistory(user.uid, [...updatedHistory, { id: Date.now().toString(), role: 'model', content: response, timestamp: Date.now() }]);
+    } catch (error) { 
+      console.error("Critical Failure:", error);
+      setTemporaryState(OrionState.SYSTEM_ALERT, 4000);
     }
   };
 
-  const handlePermissionDecision = (allowed: boolean) => {
-    if (!pendingAction) return;
-    resetInactivity();
-    const decisionText = allowed ? `[AUTORIZADO]: ${pendingAction.description}` : `[NEGADO]: ${pendingAction.description}`;
-    setPendingAction(null);
-    setOrionState(OrionState.PROCESSING);
-    const decisionMsg: Message = { id: Date.now().toString(), role: 'user', content: decisionText, timestamp: Date.now() };
-    const newHistory = [...messages, decisionMsg];
-    setMessages(newHistory);
-    sendMessageToOrion(newHistory, decisionText, notifications).then(rawResponse => {
-       const cleanResponse = processOrionResponse(rawResponse);
-       setMessages(prev => [...prev, { id: Date.now().toString(), role: 'model', content: cleanResponse, timestamp: Date.now() }]);
-       if (rawResponse.includes('[[REQUEST_PERMISSION:')) {
-           setOrionState(OrionState.AWAITING_PERMISSION);
-       } else {
-           setOrionState(OrionState.ACTIVE);
-           setTimeout(() => { if (stateRef.current === OrionState.ACTIVE) setOrionState(OrionState.IDLE); }, 1500);
-       }
-    });
-  };
-
-  const handleToggleFilter = () => setFilterSystemLogs(!filterSystemLogs);
-  const visibleMessages = filterSystemLogs ? messages.filter(m => m.role !== 'system') : messages;
+  useEffect(() => {
+    if (orionState === OrionState.BOOTING && user) {
+      const timer = setTimeout(() => setOrionState(OrionState.IDLE), 2500);
+      return () => clearTimeout(timer);
+    }
+  }, [orionState, user]);
 
   return (
-    <div className={`min-h-screen bg-[#f3f4f6] dark:bg-[#050505] text-gray-800 dark:text-gray-200 flex flex-col items-center relative overflow-hidden transition-all duration-1000 ease-in-out`}>
-      <div className={`flex justify-center transition-all duration-1000 ease-in-out z-0 ${isDeepDiveMode ? 'fixed inset-0 items-center pointer-events-none opacity-20' : 'flex-none w-full relative z-20 pt-10'} ${isDeepDiveMode && isUserInactive ? '!opacity-80' : ''}`}>
+    <div className="h-screen w-screen bg-black text-zinc-200 flex flex-col relative overflow-hidden font-inter select-none">
+      {orionState === OrionState.UNAUTHENTICATED && <LoginOverlay onLogin={handleLogin} />}
+      {isVoiceMode && <VoiceInterface onClose={() => setIsVoiceMode(false)} isListening={true} />}
+
+      <div className="flex-none flex items-center justify-center py-4 z-50">
+        <div className="font-mono text-[10px] tracking-[1em] text-zinc-700 opacity-40">ORION_OS_v2.8_STABLE</div>
+      </div>
+
+      <div className="flex-none h-[180px] flex items-center justify-center relative z-20">
         <OrionEyes state={orionState} />
       </div>
-      {messages.length > 0 && (
-        <div className={`flex-1 w-full flex flex-col items-center justify-start overflow-hidden my-4 animate-[fadeIn_0.8s_ease-out] transition-all duration-1000 z-10 ${isDeepDiveMode ? 'h-full' : ''} ${isDeepDiveMode && isUserInactive ? 'backdrop-blur-sm' : ''}`}>
-            <TerminalOutput messages={visibleMessages} />
-        </div>
-      )}
-      <div className="flex-none w-full z-20 flex justify-center pb-6 bg-gradient-to-t from-[#f3f4f6] dark:from-[#050505] to-transparent pt-10">
-        <OrionInput 
-            state={orionState}
-            inputValue={inputValue}
-            onInputChange={handleInputChange}
-            onInputSubmit={handleSendMessage}
-            onInputFocus={handleInputFocus}
-            onInputBlur={handleInputBlur}
-            pendingAction={pendingAction}
-            onPermissionDecide={handlePermissionDecision}
-            onToggleFilter={handleToggleFilter}
-            isFilterActive={filterSystemLogs}
-        />
+
+      <div className="flex-1 min-h-0 w-full overflow-hidden flex flex-col items-center relative z-10 px-4">
+        <TerminalOutput messages={messages} state={orionState} />
       </div>
-      <div className="absolute inset-0 opacity-[0.03] pointer-events-none z-[-1] invert dark:invert-0 transition-all duration-1000" 
-           style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")` }}>
+
+      <div className={`flex-none w-full z-30 transition-all duration-700 ${orionState === OrionState.UNAUTHENTICATED ? 'translate-y-full opacity-0' : 'translate-y-0 opacity-100'}`}>
+        <div className="bg-black/90 backdrop-blur-xl border-t border-zinc-900/40 pb-10 pt-4">
+          <div className="w-full max-w-2xl mx-auto px-8 flex items-center gap-6">
+            <div className="flex-1">
+               <OrionInput 
+                 state={orionState} 
+                 inputValue={inputValue} 
+                 onInputChange={setInputValue} 
+                 onInputSubmit={handleSendMessage} 
+                 onInputFocus={() => { if(orionState === OrionState.IDLE) setOrionState(OrionState.FOCUSED_EMPTY); }} 
+                 onInputBlur={() => { if(orionState === OrionState.FOCUSED_EMPTY || orionState === OrionState.FOCUSED) setOrionState(OrionState.IDLE); }} 
+               />
+            </div>
+            <button onClick={() => setIsVoiceMode(true)} className="p-3 text-zinc-700 hover:text-white transition-all active:scale-90">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+            </button>
+          </div>
+          {user && (
+            <div className="text-center mt-4 opacity-20">
+               <span className="font-mono text-[7px] tracking-[0.4em] text-zinc-800 uppercase">
+                 CORE_SYNC: {user.uid.slice(0,8)} // STATE: {orionState}
+               </span>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

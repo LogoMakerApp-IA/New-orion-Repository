@@ -1,17 +1,25 @@
+
 export enum OrionState {
-  IDLE = 'IDLE', // Standard open state
-  FOCUSED = 'FOCUSED', // Input active, user typing
-  FOCUSED_EMPTY = 'FOCUSED_EMPTY', // Input active but empty (blinking)
-  PROCESSING = 'PROCESSING', // Thinking
-  ACTIVE = 'ACTIVE', // Speaking/Outputting
-  PRE_SLEEP = 'PRE_SLEEP', // Transition: Rapid blinking before sleep
-  LOOKING_AROUND = 'LOOKING_AROUND', // New: Idle animation, looking around
-  SQUINTING = 'SQUINTING', // Transition: Eyes pressed/heavy
-  SLEEPING = 'SLEEPING', // Fully closed
-  OBSERVING = 'OBSERVING', // New: Deep Dive mode, scaling up and looking around from background
-  AWAITING_PERMISSION = 'AWAITING_PERMISSION', // Waiting for user confirmation
-  SYSTEM_ALERT = 'SYSTEM_ALERT', // Red alert for battery/resources
-  SYSTEM_SUCCESS = 'SYSTEM_SUCCESS', // Green for positive events (Charging)
+  UNAUTHENTICATED = 'UNAUTHENTICATED',
+  AUTHENTICATING = 'AUTHENTICATING',
+  BOOTING = 'BOOTING', 
+  IDLE = 'IDLE',
+  FOCUSED = 'FOCUSED',
+  FOCUSED_EMPTY = 'FOCUSED_EMPTY',
+  PROCESSING = 'PROCESSING',
+  ACTIVE = 'ACTIVE',
+  PRE_SLEEP = 'PRE_SLEEP',
+  LOOKING_AROUND = 'LOOKING_AROUND',
+  SYSTEM_SEARCHING = 'SYSTEM_SEARCHING', // Novo estado para busca de info técnica
+  SQUINTING = 'SQUINTING',
+  SLEEPING = 'SLEEPING',
+  OBSERVING = 'OBSERVING',
+  AWAITING_PERMISSION = 'AWAITING_PERMISSION',
+  SYSTEM_ALERT = 'SYSTEM_ALERT',
+  SYSTEM_SUCCESS = 'SYSTEM_SUCCESS',
+  CHARGING = 'CHARGING', 
+  ON_BATTERY = 'ON_BATTERY',
+  LISTENING = 'LISTENING', 
 }
 
 export interface Message {
@@ -19,7 +27,7 @@ export interface Message {
   role: 'user' | 'system' | 'model';
   content: string;
   timestamp: number;
-  isHidden?: boolean; // For filtering notifications
+  isHidden?: boolean; 
 }
 
 export interface LogEntry {
@@ -33,17 +41,25 @@ export interface PendingAction {
   originalResponse: string;
 }
 
-// Simulated System Notification
 export interface SysNotification {
   id: string;
   title: string;
   details: string;
   timestamp: number;
   read: boolean;
+  priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  category: 'HARDWARE' | 'SECURITY' | 'MEMORY' | 'GENERAL';
 }
 
 export interface MemoryEntry {
   id: string;
   content: string;
   timestamp: number;
+}
+
+export interface UserSession {
+  uid: string;
+  name: string;
+  email: string;
+  isGuest: boolean;
 }
