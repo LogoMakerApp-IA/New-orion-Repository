@@ -5,6 +5,7 @@ import OrionInput from './components/OrionInput';
 import TerminalOutput from './components/TerminalOutput';
 import LoginOverlay from './components/LoginOverlay';
 import VoiceInterface from './components/VoiceInterface';
+import OrionShell from './components/OrionShell';
 import { Message, OrionState, UserSession } from './types';
 import { sendMessageToOrion } from './services/geminiService';
 import { saveHistory, getHistory } from './services/memoryService';
@@ -123,26 +124,28 @@ const App: React.FC = () => {
   }, [orionState, user]);
 
   return (
-    <div className="h-screen w-screen bg-black text-zinc-200 flex flex-col relative overflow-hidden font-inter select-none">
+    <OrionShell state={orionState} isLoggedIn={!!user}>
       {orionState === OrionState.UNAUTHENTICATED && <LoginOverlay onLogin={handleLogin} />}
       {isVoiceMode && <VoiceInterface onClose={() => setIsVoiceMode(false)} isListening={true} />}
 
-      <div className="flex-none flex items-center justify-center py-4 z-50">
-        <div className="font-mono text-[10px] tracking-[1em] text-zinc-700 opacity-40">ORION_OS_v2.8_STABLE</div>
-      </div>
+      {!user ? (
+         <div className="flex-none flex items-center justify-center py-4 z-50 absolute top-4 inset-x-0">
+           <div className="font-mono text-[10px] tracking-[1em] text-zinc-700 opacity-40">ORION_OS_v2.8_STABLE</div>
+         </div>
+      ) : null}
 
-      <div className="flex-none h-[180px] flex items-center justify-center relative z-20">
+      <div className={`flex-none transition-all duration-700 flex items-center justify-center relative z-20 ${user ? 'h-[140px] md:h-[180px] shrink-0' : 'h-[180px] mt-20'}`}>
         <OrionEyes state={orionState} />
       </div>
 
-      <div className="flex-1 min-h-0 w-full overflow-hidden flex flex-col items-center relative z-10 px-4">
+      <div className="flex-1 min-h-0 w-full flex flex-col items-center relative z-10 md:px-8">
         <TerminalOutput messages={messages} state={orionState} />
       </div>
 
       <div className={`flex-none w-full z-30 transition-all duration-700 ${orionState === OrionState.UNAUTHENTICATED ? 'translate-y-full opacity-0' : 'translate-y-0 opacity-100'}`}>
-        <div className="bg-black/90 backdrop-blur-xl border-t border-zinc-900/40 pb-10 pt-4">
-          <div className="w-full max-w-2xl mx-auto px-8 flex items-center gap-6">
-            <div className="flex-1">
+        <div className="bg-gradient-to-t from-black via-black/90 to-transparent pt-12 pb-6 md:pb-8">
+          <div className="w-full max-w-3xl mx-auto px-4 md:px-8 flex items-end gap-4">
+            <div className="flex-1 bg-black rounded-3xl border border-zinc-900/60 shadow-lg overflow-hidden px-5 py-1">
                <OrionInput 
                  state={orionState} 
                  inputValue={inputValue} 
@@ -152,21 +155,25 @@ const App: React.FC = () => {
                  onInputBlur={() => { if(orionState === OrionState.FOCUSED_EMPTY || orionState === OrionState.FOCUSED) setOrionState(OrionState.IDLE); }} 
                />
             </div>
-            <button onClick={() => setIsVoiceMode(true)} className="p-3 text-zinc-700 hover:text-white transition-all active:scale-90">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+            <button 
+              onClick={() => setIsVoiceMode(true)} 
+              className="flex-none h-14 w-14 rounded-full bg-zinc-900 flex items-center justify-center border border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-800 hover:border-zinc-700 transition-all active:scale-95 shadow-lg"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
             </button>
           </div>
           {user && (
-            <div className="text-center mt-4 opacity-20">
-               <span className="font-mono text-[7px] tracking-[0.4em] text-zinc-800 uppercase">
-                 CORE_SYNC: {user.uid.slice(0,8)} // STATE: {orionState}
+            <div className="text-center mt-4 opacity-30 select-none">
+               <span className="font-mono text-[8px] tracking-[0.4em] text-zinc-500 uppercase">
+                 CORE_SYNC: {user.uid.slice(0,8)} | STATE: {orionState}
                </span>
             </div>
           )}
         </div>
       </div>
-    </div>
+    </OrionShell>
   );
 };
 
 export default App;
+

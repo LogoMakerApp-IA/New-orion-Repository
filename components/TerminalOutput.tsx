@@ -43,7 +43,7 @@ const TerminalOutput: React.FC<TerminalOutputProps> = ({ messages, state }) => {
           className={`flex flex-col ${msg.role === 'user' ? 'items-end' : msg.role === 'system' ? 'items-center my-2' : 'items-start'} opacity-0 animate-[fadeIn_0.4s_ease-out_forwards]`}
         >
           <div 
-            className={`max-w-[85%] font-mono text-sm leading-relaxed ${
+            className={`max-w-[85%] font-mono text-sm leading-relaxed whitespace-pre-wrap ${
               msg.role === 'user' 
                 ? 'text-zinc-500 text-right italic' 
                 : msg.role === 'system'

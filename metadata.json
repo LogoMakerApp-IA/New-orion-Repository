@@ -1,8 +1,9 @@
 {
   "name": "Orion 2.0 Beta test",
-  "description": "A silent, precise, and observant system presence AI. Non-social, minimalist interface focused on state and intent.",
+  "description": "Orion OS: A sentient system core that also acts as a conversational partner, capable of everyday assistance and comprehensive analysis while monitoring your systems.",
   "requestFramePermissions": [
     "geolocation",
     "microphone"
-  ]
+  ],
+  "majorCapabilities": []
 }
