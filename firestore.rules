@@ -46,7 +46,7 @@ service cloud.firestore {
       // Subcollection Messages
       match /messages/{messageId} {
         allow read: if isSignedIn() && userId == request.auth.uid && isValidId(messageId);
-        allow list: if isSignedIn() && userId == request.auth.uid && resource.data.userId == request.auth.uid;
+        allow list: if isSignedIn() && userId == request.auth.uid;
         allow create: if isSignedIn() && userId == request.auth.uid && isValidId(messageId) && isValidMessage(incoming(), userId);
         allow update: if isSignedIn() && userId == request.auth.uid && isValidId(messageId) && isValidMessage(incoming(), userId) &&
           ( incoming().diff(existing()).affectedKeys().hasOnly(['content', 'isHidden']) || incoming().diff(existing()).affectedKeys().hasOnly(['isHidden']) );
@@ -56,7 +56,7 @@ service cloud.firestore {
       // Subcollection Memories
       match /memories/{memoryId} {
         allow read: if isSignedIn() && userId == request.auth.uid && isValidId(memoryId);
-        allow list: if isSignedIn() && userId == request.auth.uid && resource.data.userId == request.auth.uid;
+        allow list: if isSignedIn() && userId == request.auth.uid;
         allow create: if isSignedIn() && userId == request.auth.uid && isValidId(memoryId) && isValidMemory(incoming(), userId);
         allow update: if isSignedIn() && userId == request.auth.uid && isValidId(memoryId) && isValidMemory(incoming(), userId) &&
           ( incoming().diff(existing()).affectedKeys().hasOnly(['content']) );

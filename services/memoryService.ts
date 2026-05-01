@@ -55,7 +55,7 @@ export const getMemory = async (uid: string): Promise<MemoryEntry[]> => {
   if (!uid) return [];
   const path = `users/${uid}/memories`;
   try {
-    const q = query(collection(db, path), where('userId', '==', uid), orderBy('timestamp', 'asc'));
+    const q = query(collection(db, path), orderBy('timestamp', 'asc'));
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => doc.data() as MemoryEntry);
   } catch (error) {
@@ -95,7 +95,7 @@ export const clearMemory = async (uid: string) => {
   if (!uid) return;
   const path = `users/${uid}/memories`;
   try {
-    const q = query(collection(db, path), where('userId', '==', uid));
+    const q = query(collection(db, path));
     const snapshot = await getDocs(q);
     for (const d of snapshot.docs) {
       await deleteDoc(d.ref);
@@ -118,7 +118,7 @@ export const getHistory = async (uid: string): Promise<Message[]> => {
   if (!uid) return [];
   const path = `users/${uid}/messages`;
   try {
-    const q = query(collection(db, path), where('userId', '==', uid), orderBy('timestamp', 'asc'));
+    const q = query(collection(db, path), orderBy('timestamp', 'asc'));
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => {
       const data = doc.data();
@@ -160,7 +160,7 @@ export const clearHistory = async (uid: string) => {
   if (!uid) return;
   const path = `users/${uid}/messages`;
   try {
-    const q = query(collection(db, path), where('userId', '==', uid));
+    const q = query(collection(db, path));
     const snapshot = await getDocs(q);
     for (const d of snapshot.docs) {
       await deleteDoc(d.ref);
