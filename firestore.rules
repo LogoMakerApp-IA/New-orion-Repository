@@ -1,0 +1,67 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} { 
+      allow read, write: if false; 
+    }
+
+    // Primitive Definition
+    function isValidId(id) { 
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); 
+    }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isSignedIn() { return request.auth != null; }
+
+    // Validation Blueprint for Message
+    function isValidMessage(data, userId) {
+      return data.keys().hasAll(['userId', 'role', 'content', 'timestamp']) &&
+             (data.keys().size() == 4 || (data.keys().hasAll(['isHidden']) && data.keys().size() == 5)) &&
+             data.userId == request.auth.uid &&
+             data.userId == userId &&
+             data.role is string &&
+             data.role.size() <= 20 &&
+             (data.role == 'user' || data.role == 'system' || data.role == 'model') &&
+             data.content is string && 
+             data.content.size() <= 200000 &&
+             data.timestamp is number &&
+             (data.get('isHidden', false) is bool);
+    }
+
+    // Validation Blueprint for MemoryEntry
+    function isValidMemory(data, userId) {
+      return data.keys().hasAll(['userId', 'content', 'timestamp']) &&
+             data.keys().size() == 3 &&
+             data.userId == request.auth.uid &&
+             data.userId == userId &&
+             data.content is string &&
+             data.content.size() <= 20000 &&
+             data.timestamp is number;
+    }
+
+    // Match Rules for User Data
+    match /users/{userId} {
+      // Subcollection Messages
+      match /messages/{messageId} {
+        allow read: if isSignedIn() && userId == request.auth.uid && isValidId(messageId);
+        allow list: if isSignedIn() && userId == request.auth.uid && resource.data.userId == request.auth.uid;
+        allow create: if isSignedIn() && userId == request.auth.uid && isValidId(messageId) && isValidMessage(incoming(), userId);
+        allow update: if isSignedIn() && userId == request.auth.uid && isValidId(messageId) && isValidMessage(incoming(), userId) &&
+          ( incoming().diff(existing()).affectedKeys().hasOnly(['content', 'isHidden']) || incoming().diff(existing()).affectedKeys().hasOnly(['isHidden']) );
+        allow delete: if isSignedIn() && userId == request.auth.uid && isValidId(messageId);
+      }
+
+      // Subcollection Memories
+      match /memories/{memoryId} {
+        allow read: if isSignedIn() && userId == request.auth.uid && isValidId(memoryId);
+        allow list: if isSignedIn() && userId == request.auth.uid && resource.data.userId == request.auth.uid;
+        allow create: if isSignedIn() && userId == request.auth.uid && isValidId(memoryId) && isValidMemory(incoming(), userId);
+        allow update: if isSignedIn() && userId == request.auth.uid && isValidId(memoryId) && isValidMemory(incoming(), userId) &&
+          ( incoming().diff(existing()).affectedKeys().hasOnly(['content']) );
+        allow delete: if isSignedIn() && userId == request.auth.uid && isValidId(memoryId);
+      }
+    }
+  }
+}

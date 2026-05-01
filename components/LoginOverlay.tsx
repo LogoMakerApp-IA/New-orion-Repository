@@ -1,64 +1,45 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import { auth } from '../lib/firebase';
+import { signInWithPopup, GoogleAuthProvider, signInAnonymously } from 'firebase/auth';
 
 interface LoginOverlayProps {
   onLogin: (method: 'full' | 'guest', data?: any) => void;
 }
 
 const LoginOverlay: React.FC<LoginOverlayProps> = ({ onLogin }) => {
-  const [view, setView] = useState<'selection' | 'login' | 'register'>('selection');
+  const [view, setView] = useState<'selection'>('selection');
   const [isTransitioning, setIsTransitioning] = useState(false);
-  const [formData, setFormData] = useState({ email: '', password: '', confirmPassword: '' });
   const [error, setError] = useState('');
-
-  const getRegisteredUsers = () => {
-    const users = localStorage.getItem('ORION_REGISTERED_USERS');
-    return users ? JSON.parse(users) : [];
-  };
 
   const triggerBootSequence = (method: 'full' | 'guest', data?: any) => {
     setIsTransitioning(true);
-    // Tempo para a animação de colapso visual antes de chamar o onLogin do App
     setTimeout(() => {
       onLogin(method, data);
     }, 1200);
   };
 
-  const handleLoginSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleGoogleLogin = async () => {
     setError('');
-    const users = getRegisteredUsers();
-    const user = users.find((u: any) => u.email === formData.email && u.password === formData.password);
-    if (!user) {
-      setError('CONTA NÃO ENCONTRADA OU CREDENCIAIS INVÁLIDAS.');
-      return;
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
+    try {
+      const result = await signInWithPopup(auth, provider);
+      triggerBootSequence('full', { email: result.user.email, uid: result.user.uid, name: result.user.displayName });
+    } catch (err: any) {
+      console.error("Login failure:", err);
+      setError('FALHA DE AUTENTICAÇÃO: ' + err.message);
     }
-    triggerBootSequence('full', { email: user.email });
   };
 
-  const handleRegisterSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleGuestLogin = async () => {
     setError('');
-    if (!formData.email || !formData.password || !formData.confirmPassword) {
-      setError('CAMPOS OBRIGATÓRIOS AUSENTES.');
-      return;
+    try {
+      const result = await signInAnonymously(auth);
+      triggerBootSequence('guest', { uid: result.user.uid });
+    } catch (err: any) {
+      console.error("Guest login failure:", err);
+      setError('FALHA NO ACESSO TEMPORÁRIO: ' + err.message);
     }
-    if (formData.password !== formData.confirmPassword) {
-      setError('AS SENHAS NÃO COINCIDEM.');
-      return;
-    }
-    const users = getRegisteredUsers();
-    if (users.find((u: any) => u.email === formData.email)) {
-      setError('ESTA IDENTIDADE JÁ ESTÁ VINCULADA.');
-      return;
-    }
-    const newUser = { email: formData.email, password: formData.password };
-    localStorage.setItem('ORION_REGISTERED_USERS', JSON.stringify([...users, newUser]));
-    triggerBootSequence('full', { email: formData.email });
-  };
-
-  const resetForm = () => {
-    setFormData({ email: '', password: '', confirmPassword: '' });
-    setError('');
   };
 
   return (
@@ -93,19 +74,7 @@ const LoginOverlay: React.FC<LoginOverlayProps> = ({ onLogin }) => {
 
       {/* Header Navigation */}
       <div className={`w-full flex justify-between items-center max-w-md transition-all duration-700 ${isTransitioning ? 'opacity-0 -translate-y-20' : ''}`}>
-        <button 
-          onClick={() => {
-            if (view === 'login') setView('selection');
-            else if (view === 'register') setView('login');
-            resetForm();
-          }}
-          className={`p-2 transition-opacity duration-300 ${view !== 'selection' ? 'opacity-100 cursor-pointer' : 'opacity-0 cursor-default pointer-events-none'}`}
-        >
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="15 18 9 12 15 6"></polyline>
-          </svg>
-        </button>
-        
+        <div className="w-10"></div>
         <div className="font-mono text-[10px] tracking-[0.4em] text-white/60 uppercase">ORION_OS</div>
         <div className="w-10"></div>
       </div>
@@ -118,115 +87,28 @@ const LoginOverlay: React.FC<LoginOverlayProps> = ({ onLogin }) => {
           {isTransitioning && <div className="absolute inset-0 bg-white blur-xl animate-ping"></div>}
         </div>
 
-        {view === 'selection' ? (
-          <div className="w-full space-y-8 animate-[fadeIn_0.5s_ease-out]">
-            <button
-              onClick={() => setView('login')}
-              className="w-full py-4 border border-zinc-800 hover:border-zinc-400 text-zinc-400 hover:text-white font-mono text-xs tracking-[0.2em] transition-all duration-500 bg-transparent group relative overflow-hidden"
-            >
-              <span className="relative z-10">[ VINCULAR_IDENTIDADE_GOOGLE ]</span>
-              <div className="absolute inset-0 bg-white/5 translate-y-full group-hover:translate-y-0 transition-transform duration-500"></div>
-            </button>
+        <div className="w-full space-y-8 animate-[fadeIn_0.5s_ease-out]">
+          <button
+            onClick={handleGoogleLogin}
+            className="w-full py-4 border border-zinc-800 hover:border-zinc-400 text-zinc-400 hover:text-white font-mono text-xs tracking-[0.2em] transition-all duration-500 bg-transparent group relative overflow-hidden"
+          >
+            <span className="relative z-10">[ VINCULAR_IDENTIDADE_GOOGLE ]</span>
+            <div className="absolute inset-0 bg-white/5 translate-y-full group-hover:translate-y-0 transition-transform duration-500"></div>
+          </button>
 
-            <button
-              onClick={() => triggerBootSequence('guest')}
-              className="w-full py-4 border border-zinc-900 hover:border-zinc-700 text-zinc-600 hover:text-zinc-400 font-mono text-[10px] tracking-[0.2em] transition-all duration-500 bg-transparent"
-            >
-              [ ACESSO_TEMPORAL_CONVIDADO ]
-            </button>
-          </div>
-        ) : view === 'login' ? (
-          <form onSubmit={handleLoginSubmit} className="w-full space-y-12 animate-[slideUp_0.4s_ease-out]">
-            <div className="space-y-10">
-              <input 
-                type="email"
-                required
-                value={formData.email}
-                onChange={e => setFormData({...formData, email: e.target.value})}
-                className="w-full bg-transparent border-b border-zinc-800 focus:border-white outline-none py-4 font-mono text-sm text-white transition-colors placeholder:text-zinc-700"
-                placeholder="Email"
-                autoComplete="off"
-              />
-              <input 
-                type="password"
-                required
-                value={formData.password}
-                onChange={e => setFormData({...formData, password: e.target.value})}
-                className="w-full bg-transparent border-b border-zinc-800 focus:border-white outline-none py-4 font-mono text-sm text-white transition-colors placeholder:text-zinc-700"
-                placeholder="Password"
-              />
-            </div>
-
-            {error && <div className="text-red-500 font-mono text-[9px] text-center animate-pulse tracking-widest uppercase">{error}</div>}
-
-            <button
-              type="submit"
-              className="w-full py-4 border border-white hover:bg-white hover:text-black text-white font-mono text-sm tracking-[0.3em] transition-all duration-300 relative group overflow-hidden"
-            >
-              <span className="relative z-10">LOGIN</span>
-              <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-10 scale-0 group-hover:scale-150 transition-all duration-700 rounded-full"></div>
-            </button>
-          </form>
-        ) : (
-          <form onSubmit={handleRegisterSubmit} className="w-full space-y-10 animate-[slideUp_0.4s_ease-out]">
-            <div className="space-y-6">
-              <input 
-                type="email"
-                required
-                value={formData.email}
-                onChange={e => setFormData({...formData, email: e.target.value})}
-                className="w-full bg-transparent border-b border-zinc-800 focus:border-white outline-none py-3 font-mono text-sm text-white transition-colors placeholder:text-zinc-700"
-                placeholder="Novo Email"
-              />
-              <input 
-                type="password"
-                required
-                value={formData.password}
-                onChange={e => setFormData({...formData, password: e.target.value})}
-                className="w-full bg-transparent border-b border-zinc-800 focus:border-white outline-none py-3 font-mono text-sm text-white transition-colors placeholder:text-zinc-700"
-                placeholder="Senha"
-              />
-              <input 
-                type="password"
-                required
-                value={formData.confirmPassword}
-                onChange={e => setFormData({...formData, confirmPassword: e.target.value})}
-                className="w-full bg-transparent border-b border-zinc-800 focus:border-white outline-none py-3 font-mono text-sm text-white transition-colors placeholder:text-zinc-700"
-                placeholder="Confirmar Senha"
-              />
-            </div>
-
-            {error && <div className="text-red-500 font-mono text-[9px] text-center animate-pulse tracking-widest uppercase">{error}</div>}
-
-            <button
-              type="submit"
-              className="w-full py-4 border border-white hover:bg-white hover:text-black text-white font-mono text-sm tracking-[0.3em] transition-all duration-300"
-            >
-              CREATE_ACCOUNT
-            </button>
-          </form>
-        )}
+          <button
+            onClick={handleGuestLogin}
+            className="w-full py-4 border border-zinc-900 hover:border-zinc-700 text-zinc-600 hover:text-zinc-400 font-mono text-[10px] tracking-[0.2em] transition-all duration-500 bg-transparent"
+          >
+            [ ACESSO_TEMPORAL_CONVIDADO ]
+          </button>
+          
+          {error && <div className="text-red-500 font-mono text-[9px] text-center animate-pulse tracking-widest uppercase mt-4">{error}</div>}
+        </div>
       </div>
 
       {/* Footer Links */}
       <div className={`w-full max-w-md flex flex-col items-center space-y-5 pt-8 transition-all duration-700 ${isTransitioning ? 'opacity-0 translate-y-20' : ''}`}>
-        {view === 'login' && (
-          <>
-            <button type="button" className="font-mono text-[10px] text-zinc-600 hover:text-zinc-400 transition-colors tracking-wide">
-              Forgot Password?
-            </button>
-            <div className="font-mono text-[10px] text-zinc-600 tracking-wide">
-              New to Orion? <button type="button" onClick={() => { setView('register'); resetForm(); }} className="text-zinc-400 hover:text-white font-bold ml-1 transition-colors">Create Account</button>
-            </div>
-          </>
-        )}
-
-        {view === 'register' && (
-           <div className="font-mono text-[10px] text-zinc-600 tracking-wide">
-             Already has an account? <button type="button" onClick={() => { setView('login'); resetForm(); }} className="text-zinc-400 hover:text-white font-bold ml-1 transition-colors">Login</button>
-           </div>
-        )}
-        
         <div className="w-32 h-[4px] bg-zinc-900 rounded-full mt-6"></div>
       </div>
     </div>

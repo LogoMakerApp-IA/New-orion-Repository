@@ -1,0 +1,63 @@
+{
+  "entities": {
+    "Message": {
+      "title": "Message",
+      "description": "A single chat message.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "User this message belongs to."
+        },
+        "role": {
+          "type": "string",
+          "enum": ["user", "system", "model"],
+          "description": "Role of the message sender."
+        },
+        "content": {
+          "type": "string",
+          "description": "The message text content."
+        },
+        "timestamp": {
+          "type": "number",
+          "description": "Timestamp of the message."
+        },
+        "isHidden": {
+          "type": "boolean",
+          "description": "Flag to not show the message."
+        }
+      },
+      "required": ["userId", "role", "content", "timestamp"]
+    },
+    "MemoryEntry": {
+      "title": "MemoryEntry",
+      "description": "Long-term memory extracted for the user.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "User this memory belongs to."
+        },
+        "content": {
+          "type": "string",
+          "description": "The extracted memory fact."
+        },
+        "timestamp": {
+          "type": "number",
+          "description": "Timestamp when it was recorded."
+        }
+      },
+      "required": ["userId", "content", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/Message" },
+      "description": "User chat history."
+    },
+    "/users/{userId}/memories/{memoryId}": {
+      "schema": { "$ref": "#/entities/MemoryEntry" },
+      "description": "User long-term memory facts."
+    }
+  }
+}

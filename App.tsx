@@ -8,7 +8,9 @@ import VoiceInterface from './components/VoiceInterface';
 import OrionShell from './components/OrionShell';
 import { Message, OrionState, UserSession } from './types';
 import { sendMessageToOrion } from './services/geminiService';
-import { saveHistory, getHistory } from './services/memoryService';
+import { saveMessageToHistory, getHistory } from './services/memoryService';
+import { auth } from './lib/firebase';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
 
 const App: React.FC = () => {
   const [orionState, setOrionState] = useState<OrionState>(OrionState.UNAUTHENTICATED);
@@ -40,44 +42,48 @@ const App: React.FC = () => {
     };
   }, [setTemporaryState]);
 
-  // Persistência de Login
+  // Persistência de Login via Firebase
   useEffect(() => {
-    const savedUser = localStorage.getItem('ORION_USER_SESSION');
-    if (savedUser) {
-      const parsedUser = JSON.parse(savedUser);
-      setUser(parsedUser);
-      setMessages(getHistory(parsedUser.uid));
-      setOrionState(OrionState.BOOTING);
-    }
-  }, []);
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        const isGuest = firebaseUser.isAnonymous;
+        const userData: UserSession = { 
+          uid: firebaseUser.uid, 
+          name: firebaseUser.displayName || 'Visitante', 
+          email: firebaseUser.email || '', 
+          isGuest 
+        };
+        setUser(userData);
+        const history = await getHistory(firebaseUser.uid);
+        setMessages(history || []);
+        if (orionState === OrionState.UNAUTHENTICATED || orionState === OrionState.AUTHENTICATING) {
+          setOrionState(OrionState.BOOTING);
+        }
+      } else {
+        setUser(null);
+        setMessages([]);
+        setOrionState(OrionState.UNAUTHENTICATED);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [orionState]);
 
   const handleLogout = useCallback(() => {
     setOrionState(OrionState.AUTHENTICATING);
-    setTimeout(() => {
-      localStorage.removeItem('ORION_USER_SESSION');
-      setUser(null);
-      setMessages([]);
-      setOrionState(OrionState.UNAUTHENTICATED);
+    setTimeout(async () => {
+      await signOut(auth);
+      // O onAuthStateChanged cuidará de limpar o estado
     }, 1500);
   }, []);
 
   const handleLogin = (method: 'full' | 'guest', data?: any) => {
     setOrionState(OrionState.AUTHENTICATING);
-    setTimeout(() => {
-      const isGuest = method === 'guest';
-      const userData: UserSession = !isGuest
-        ? { uid: 'u-' + btoa(data.email).substr(0, 10), name: data.email.split('@')[0], email: data.email, isGuest: false }
-        : { uid: 'guest-' + Date.now(), name: 'Visitante', email: '', isGuest: true };
-      
-      localStorage.setItem('ORION_USER_SESSION', JSON.stringify(userData));
-      setUser(userData);
-      setMessages(getHistory(userData.uid));
-      setOrionState(OrionState.BOOTING);
-    }, 1500);
+    // Aqui não precisamos setar localStorage, o onAuthStateChanged fará o trabalho
   };
 
   const handleSendMessage = async () => {
-    if (!inputValue.trim() || orionState === OrionState.PROCESSING || !user) return;
+    if (!inputValue.trim() || orionState === OrionState.PROCESSING || orionState === OrionState.SYSTEM_SEARCHING || !user) return;
     
     const currentText = inputValue.trim();
     const systemKeywords = ['bateria', 'cpu', 'hardware', 'sistema', 'memória', 'status', 'info'];
@@ -95,26 +101,44 @@ const App: React.FC = () => {
     const userMsg: Message = { id: Date.now().toString(), role: 'user', content: currentText, timestamp: Date.now() };
     const updatedHistory = [...messages, userMsg];
     setMessages(updatedHistory);
+    // Salvar async no Firebase
+    await saveMessageToHistory(user.uid, userMsg);
     
+    // Timeout de segurança (15s) para evitar travamento
+    const safetyTimeout = setTimeout(() => {
+      setOrionState(OrionState.IDLE);
+      console.warn("Orion safety timeout acionado.");
+    }, 15000);
+
     try {
       const response = await sendMessageToOrion(user.uid, updatedHistory, currentText, [], undefined, user.isGuest);
       
       // Interceptador de Protocolo de Logout
       if (response.includes('[[LOGOUT]]')) {
         const cleanResponse = response.replace('[[LOGOUT]]', '').trim();
-        setMessages(prev => [...prev, { id: 'logout-msg', role: 'model', content: cleanResponse, timestamp: Date.now() }]);
+        const modelLogoutMsg: Message = { id: 'logout-msg', role: 'model', content: cleanResponse, timestamp: Date.now() };
+        setMessages(prev => [...prev, modelLogoutMsg]);
+        await saveMessageToHistory(user.uid, modelLogoutMsg);
         setTimeout(handleLogout, 2500);
-        return;
+        return; // Retorna para não setar outras coisas
       }
 
-      setMessages(prev => [...prev, { id: Date.now().toString(), role: 'model', content: response, timestamp: Date.now() }]);
-      setOrionState(OrionState.IDLE);
-      saveHistory(user.uid, [...updatedHistory, { id: Date.now().toString(), role: 'model', content: response, timestamp: Date.now() }]);
+      const modelMsg: Message = { id: Date.now().toString(), role: 'model', content: response, timestamp: Date.now() };
+      setMessages(prev => [...prev, modelMsg]);
+      await saveMessageToHistory(user.uid, modelMsg);
     } catch (error) { 
       console.error("Critical Failure:", error);
       setTemporaryState(OrionState.SYSTEM_ALERT, 4000);
+    } finally {
+      clearTimeout(safetyTimeout);
+      setOrionState(prev => (prev === OrionState.AUTHENTICATING || prev === OrionState.SYSTEM_ALERT) ? prev : OrionState.IDLE);
     }
   };
+
+  // Logs para fins de debug
+  useEffect(() => {
+    console.log("Estado atual:", orionState);
+  }, [orionState]);
 
   useEffect(() => {
     if (orionState === OrionState.BOOTING && user) {

@@ -1,7 +1,7 @@
 import { GoogleGenAI, Content, Part } from "@google/genai";
 import { SYSTEM_INSTRUCTION, MODEL_NAME } from "../constants";
 import { Message, SysNotification } from "../types";
-import { getMemoryContextString } from "./memoryService";
+import { getMemoryContextString, saveMemory } from "./memoryService";
 
 const getBatteryInfo = async () => {
   try {
@@ -53,7 +53,7 @@ DIRETRIZ: Atuar como um parceiro conversacional analítico e prestativo, mas man
 
   const battery = await getBatteryInfo();
   const hardware = await getHardwareInfo();
-  const memoryContext = getMemoryContextString(uid);
+  const memoryContext = await getMemoryContextString(uid);
   
   return `
 [NÚCLEO DE TELEMETRIA ORION - ACESSO TOTAL]
@@ -127,7 +127,16 @@ COMANDO DO USUÁRIO: ${userMessage}
       },
     });
 
-    return response.text || "Falha na resposta do núcleo.";
+    let textResponse = response.text || "Falha na resposta do núcleo.";
+
+    // Interceptar [[MEMORY_WRITE: ...]]
+    const memoryMatch = textResponse.match(/\[\[MEMORY_WRITE:\s*(.*?)\]\]/);
+    if (memoryMatch && memoryMatch[1] && !isGuest) {
+      await saveMemory(uid, memoryMatch[1]);
+      textResponse = textResponse.replace(memoryMatch[0], '').trim();
+    }
+
+    return textResponse;
   } catch (error: any) {
     console.error("Orion System Error:", error);
     return "Instabilidade nos subsistemas de hardware detectada. Tente reiniciar o ciclo."; 
