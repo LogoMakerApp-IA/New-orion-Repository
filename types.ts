@@ -52,7 +52,8 @@ export interface SysNotification {
 }
 
 export interface MemoryEntry {
-  id: string;
+  id?: string;
+  userId?: string;
   content: string;
   timestamp: number;
 }
