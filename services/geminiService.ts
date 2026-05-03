@@ -123,7 +123,7 @@ COMANDO DO USUÁRIO: ${userMessage}
       config: {
         systemInstruction: SYSTEM_INSTRUCTION,
         temperature: 0.7,
-        maxOutputTokens: 1000,
+        maxOutputTokens: 8192,
       },
     });
 
@@ -141,4 +141,26 @@ COMANDO DO USUÁRIO: ${userMessage}
     console.error("Orion System Error:", error);
     return "Instabilidade nos subsistemas de hardware detectada. Tente reiniciar o ciclo."; 
   }
+};
+
+export const generateOrionSpeech = async (text: string): Promise<string | null> => {
+   try {
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      // Remove any specific markup tags from text before sending
+      const cleanText = text.replace(/\[\[.*?\]\]/g, '').trim();
+      const response = await ai.models.generateContent({
+         model: "gemini-3.1-flash-tts-preview",
+         contents: [{ parts: [{ text: cleanText }] }],
+         config: {
+           responseModalities: ["AUDIO"],
+           speechConfig: {
+             voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Puck' } }
+           }
+         }
+      });
+      return response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data || null;
+   } catch (error) {
+      console.error("Audio Gen Error:", error);
+      return null;
+   }
 };

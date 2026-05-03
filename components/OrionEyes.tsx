@@ -61,6 +61,13 @@ const OrionEyes: React.FC<OrionEyesProps> = ({ state }) => {
         config.text = "PROCESSANDO...";
         config.animation = "animate-think-square";
         break;
+      case OrionState.ACTIVE:
+        config.color = "bg-white";
+        config.text = "SISTEMA_ATIVO";
+        config.animation = "animate-talk-bounce";
+        config.glow = "shadow-[0_0_60px_rgba(255,255,255,0.7)]";
+        config.eyeScale = "scale-105";
+        break;
       case OrionState.CHARGING:
         config.color = "bg-emerald-400";
         config.text = "ENERGIA_RESTAURADA";
@@ -121,10 +128,20 @@ const OrionEyes: React.FC<OrionEyesProps> = ({ state }) => {
         .animate-shake-critical { animation: shake-critical 0.2s cubic-bezier(.36,.07,.19,.97) both infinite; }
 
         @keyframes think-square {
-          0%, 100% { transform: rotate(0deg) scale(0.95); }
-          50% { transform: rotate(5deg) scale(1.05); }
+          0%, 100% { transform: rotate(0deg) scale(0.95); border-radius: 20px; }
+          25% { transform: rotate(10deg) scale(1.1); border-radius: 35px; }
+          50% { transform: rotate(-5deg) scale(0.9); border-radius: 15px; }
+          75% { transform: rotate(5deg) scale(1.05); border-radius: 25px; }
         }
         .animate-think-square { animation: think-square 2s ease-in-out infinite; }
+
+        @keyframes talk-bounce {
+          0%, 100% { transform: scale(1) translateY(0); border-radius: 20px; }
+          25% { transform: scale(1.05) translateY(-5px); border-radius: 24px; }
+          50% { transform: scale(0.95) translateY(2px); border-radius: 18px; }
+          75% { transform: scale(1.05) translateY(-2px); border-radius: 22px; }
+        }
+        .animate-talk-bounce { animation: talk-bounce 2s ease-in-out infinite; }
       `}</style>
 
       <div className={`flex gap-14 mb-10 transition-transform duration-1000 ${config.animation}`}>
