@@ -54,7 +54,7 @@ const App: React.FC = () => {
           isGuest 
         };
         setUser(userData);
-        const history = await getHistory(firebaseUser.uid);
+        const history = await getHistory(userData.uid);
         setMessages(history || []);
         if (orionState === OrionState.UNAUTHENTICATED || orionState === OrionState.AUTHENTICATING) {
           setOrionState(OrionState.BOOTING);
@@ -73,13 +73,11 @@ const App: React.FC = () => {
     setOrionState(OrionState.AUTHENTICATING);
     setTimeout(async () => {
       await signOut(auth);
-      // O onAuthStateChanged cuidará de limpar o estado
     }, 1500);
   }, []);
 
   const handleLogin = (method: 'full' | 'guest', data?: any) => {
     setOrionState(OrionState.AUTHENTICATING);
-    // Aqui não precisamos setar localStorage, o onAuthStateChanged fará o trabalho
   };
 
   const handleSendMessage = async () => {
@@ -102,7 +100,7 @@ const App: React.FC = () => {
     const updatedHistory = [...messages, userMsg];
     setMessages(updatedHistory);
     // Salvar async no Firebase
-    await saveMessageToHistory(user.uid, userMsg);
+    saveMessageToHistory(user.uid, userMsg);
     
     // Timeout de segurança (15s) para evitar travamento
     const safetyTimeout = setTimeout(() => {
@@ -118,14 +116,14 @@ const App: React.FC = () => {
         const cleanResponse = response.replace('[[LOGOUT]]', '').trim();
         const modelLogoutMsg: Message = { id: 'logout-msg', role: 'model', content: cleanResponse, timestamp: Date.now() };
         setMessages(prev => [...prev, modelLogoutMsg]);
-        await saveMessageToHistory(user.uid, modelLogoutMsg);
+        saveMessageToHistory(user.uid, modelLogoutMsg);
         setTimeout(handleLogout, 2500);
         return; // Retorna para não setar outras coisas
       }
 
       const modelMsg: Message = { id: Date.now().toString(), role: 'model', content: response, timestamp: Date.now() };
       setMessages(prev => [...prev, modelMsg]);
-      await saveMessageToHistory(user.uid, modelMsg);
+      saveMessageToHistory(user.uid, modelMsg);
     } catch (error) { 
       console.error("Critical Failure:", error);
       setTemporaryState(OrionState.SYSTEM_ALERT, 4000);
